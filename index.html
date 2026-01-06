@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>互动点歌台</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --card-bg: #2d2d2d;
+            --text-main: #ffffff;
+            --text-sub: #a0a0a0;
+            --accent: #ff0055;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 容器：模拟手机屏幕宽度 */
+        .app-container {
+            max-width: 480px;
+            margin: 0 auto;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        /* 隐藏所有视图，通过 JS 切换 */
+        .view { display: none; }
+        .view.active { display: block; animation: fadeIn 0.3s ease; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 通用按钮 */
+        .btn-back {
+            background: none;
+            border: none;
+            color: var(--text-sub);
+            font-size: 16px;
+            margin-bottom: 20px;
+            cursor: pointer;
+            padding: 10px 0;
+        }
+
+        /* === 首页 === */
+        .home-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            height: 80vh;
+            justify-content: center;
+        }
+        .big-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.1s;
+            border: 1px solid #444;
+        }
+        .big-card:active { transform: scale(0.98); background: #333; }
+        .big-card h2 { margin: 0; font-size: 24px; }
+        .big-card p { color: var(--text-sub); margin-top: 8px; }
+
+        /* === 主播列表 (Grid) === */
+        .anchor-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3列 */
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .anchor-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+        }
+        .avatar-box {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            padding: 3px; /* 边框间距 */
+            background-clip: content-box;
+            border: 3px solid transparent; /* 颜色由 JS 控制 */
+            overflow: hidden;
+            margin-bottom: 8px;
+            transition: transform 0.1s;
+        }
+        .anchor-item:active .avatar-box { transform: scale(0.9); opacity: 0.8; }
+        .avatar-img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #444; /* 没图时的底色 */
+        }
+        .anchor-name { font-size: 13px; text-align: center; color: var(--text-main); }
+
+        /* === 详情页 & 求签页 === */
+        .header-section { text-align: center; margin-bottom: 30px; }
+        .header-avatar { width: 80px; height: 80px; border-radius: 50%; border: 4px solid var(--accent); object-fit: cover; margin-bottom: 10px; }
+        
+        .action-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #ff0055, #ff5500);
+            color: white;
+            border: none;
+            padding: 18px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(255, 0, 85, 0.4);
+            cursor: pointer;
+            margin-bottom: 30px;
+        }
+        .action-btn:active { transform: scale(0.98); }
+
+        .result-list { list-style: none; padding: 0; }
+        .song-item {
+            background: var(--card-bg);
+            margin-bottom: 12px;
+            padding: 15px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border: 1px solid #333;
+        }
+        .song-item:active { background: #444; border-color: #666; }
+        .song-info { display: flex; flex-direction: column; }
+        .song-name { font-weight: bold; font-size: 16px; margin-bottom: 4px; }
+        .song-artist { font-size: 12px; color: var(--text-sub); }
+        .copy-hint { font-size: 12px; color: var(--accent); }
+
+        /* 签文卡片 */
+        .fortune-card {
+            background: #ffd700;
+            color: #000;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+            transform: rotate(-1deg);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .fortune-title { font-size: 24px; font-weight: bold; margin: 10px 0; }
+        .fortune-text { font-size: 14px; line-height: 1.5; }
+
+        /* Toast 提示 */
+        #toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.9);
+            color: #000;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+
+<div id="toast">✅ 已复制点歌指令</div>
+
+<div class="app-container">
+    
+    <div id="view-home" class="view active">
+        <h1 style="text-align: center; margin-bottom: 30px;">🎵 点歌小助手</h1>
+        <div class="home-menu">
+            <div class="big-card" onclick="goToFortune()">
+                <h2>🏮 赛博求签</h2>
+                <p>测运势 · 随机听歌</p>
+            </div>
+            <div class="big-card" onclick="goToAnchorList()">
+                <h2>🎙️ 主播歌单</h2>
+                <p>查库存 · 一键复制</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-anchor-list" class="view">
+        <button class="btn-back" onclick="switchView('view-home')">← 返回首页</button>
+        <h2 style="margin-bottom: 20px;">选择主播</h2>
+        <div class="anchor-grid" id="anchor-grid-container">
+            <p style="color: #666;">正在加载数据...</p>
+        </div>
+    </div>
+
+    <div id="view-anchor-detail" class="view">
+        <button class="btn-back" onclick="switchView('view-anchor-list')">← 换个主播</button>
+        
+        <div class="header-section">
+            <img id="detail-avatar" src="" class="header-avatar">
+            <h2 id="detail-name">主播名</h2>
+            <p style="color: #666; font-size: 12px;">库中共有 <span id="song-count">0</span> 首歌</p>
+        </div>
+
+        <button class="action-btn" onclick="drawSongs()">🎲 随机抽取三首</button>
+        
+        <p style="text-align: center; color: #666; font-size: 12px; margin-bottom: 10px;">↓ 点击歌名复制 ↓</p>
+        <div id="song-result-list" class="result-list"></div>
+    </div>
+
+    <div id="view-fortune" class="view">
+        <button class="btn-back" onclick="switchView('view-home')">← 返回</button>
+        
+        <div id="fortune-content" style="display: none;">
+            <div class="fortune-card">
+                <div style="font-size: 12px;">今日运势</div>
+                <div class="fortune-title" id="fortune-title">...</div>
+                <div class="fortune-text" id="fortune-desc">...</div>
+            </div>
+            <div style="margin-top: 30px;">
+                <h3 style="font-size: 16px; margin-bottom: 15px;">💊 处方歌曲</h3>
+                <div id="fortune-song-list" class="result-list"></div>
+            </div>
+        </div>
+
+        <div id="fortune-loading" style="text-align: center; padding-top: 50px;">
+            <div style="font-size: 40px;">🎋</div>
+            <p>正在摇签筒...</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // --- 状态管理 ---
+    let allAnchors = [];
+    let currentAnchorSongs = [];
+    let fortuneData = [];
+    let fortuneSongs = [];
+
+    // --- 初始化 ---
+    window.onload = function() {
+        // 预加载主播列表
+        loadCSV('anchors.csv', function(data) {
+            allAnchors = data;
+            renderAnchorList();
+        });
+        // 预加载求签数据
+        loadCSV('fortunes.csv', (data) => fortuneData = data);
+        loadCSV('fortune_songs.csv', (data) => fortuneSongs = data);
+    };
+
+    // --- 核心工具：读取 CSV ---
+    function loadCSV(file, callback) {
+        Papa.parse(file, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                if(results.data && results.data.length > 0) {
+                    callback(results.data);
+                } else {
+                    console.error("文件读取为空或格式错误:", file);
+                }
+            },
+            error: function(err) {
+                console.error("无法读取文件 (请检查文件名或服务器设置):", file);
+                // alert("无法读取数据文件，请确保使用了本地服务器或GitHub Pages。");
+            }
+        });
+    }
+
+    // --- 视图切换 ---
+    function switchView(viewId) {
+        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+        document.getElementById(viewId).classList.add('active');
+    }
+
+    // --- 逻辑：渲染主播列表 ---
+    function goToAnchorList() {
+        switchView('view-anchor-list');
+    }
+
+    function renderAnchorList() {
+        const container = document.getElementById('anchor-grid-container');
+        container.innerHTML = ''; // 清空
+
+        allAnchors.forEach(anchor => {
+            const item = document.createElement('div');
+            item.className = 'anchor-item';
+            // 使用 CSS 变量传递边框颜色
+            item.innerHTML = `
+                <div class="avatar-box" style="border-color: ${anchor.color || '#fff'}">
+                    <img src="${anchor.avatar || ''}" class="avatar-img" onerror="this.src='https://via.placeholder.com/100?text=User'">
+                </div>
+                <div class="anchor-name">${anchor.name}</div>
+            `;
+            item.onclick = () => openAnchorDetail(anchor);
+            container.appendChild(item);
+        });
+    }
+
+    // --- 逻辑：主播详情 & 抽歌 ---
+    function openAnchorDetail(anchor) {
+        // 设置 UI
+        document.getElementById('detail-name').innerText = anchor.name;
+        document.getElementById('detail-avatar').src = anchor.avatar;
+        document.getElementById('detail-avatar').style.borderColor = anchor.color;
+        document.getElementById('song-result-list').innerHTML = ''; // 清空旧结果
+        document.getElementById('song-count').innerText = '...';
+
+        switchView('view-anchor-detail');
+
+        // 加载该主播的歌单文件
+        loadCSV(anchor.file, function(songs) {
+            currentAnchorSongs = songs;
+            document.getElementById('song-count').innerText = songs.length;
+        });
+    }
+
+    function drawSongs() {
+        if (!currentAnchorSongs || currentAnchorSongs.length === 0) {
+            alert('歌单加载中或为空！');
+            return;
+        }
+
+        // 随机取3首 (如果不满3首，取全部)
+        const count = Math.min(3, currentAnchorSongs.length);
+        // 洗牌算法
+        const shuffled = [...currentAnchorSongs].sort(() => 0.5 - Math.random());
+        const selected = shuffled.slice(0, count);
+
+        renderSongList(selected, 'song-result-list');
+    }
+
+    // --- 逻辑：求签 ---
+    function goToFortune() {
+        switchView('view-fortune');
+        const content = document.getElementById('fortune-content');
+        const loading = document.getElementById('fortune-loading');
+        
+        content.style.display = 'none';
+        loading.style.display = 'block';
+
+        // 模拟摇签动画 1.5秒
+        setTimeout(() => {
+            loading.style.display = 'none';
+            content.style.display = 'block';
+            runFortuneLogic();
+        }, 1500);
+    }
+
+    function runFortuneLogic() {
+        // 1. 随机签文
+        if (fortuneData.length === 0 || fortuneSongs.length === 0) {
+            document.getElementById('fortune-title').innerText = "数据缺失";
+            return;
+        }
+        const randomFortune = fortuneData[Math.floor(Math.random() * fortuneData.length)];
+        
+        // 2. 随机2首歌
+        const shuffledSongs = [...fortuneSongs].sort(() => 0.5 - Math.random());
+        const randomSongs = shuffledSongs.slice(0, 2);
+
+        // 渲染
+        document.getElementById('fortune-title').innerText = randomFortune.title || randomFortune.gua;
+        document.getElementById('fortune-desc').innerText = randomFortune.text;
+        
+        renderSongList(randomSongs, 'fortune-song-list');
+    }
+
+    // --- 通用：渲染歌单列表 ---
+    function renderSongList(songs, containerId) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+        
+        songs.forEach((song, index) => {
+            const div = document.createElement('div');
+            div.className = 'song-item';
+            div.innerHTML = `
+                <div class="song-info">
+                    <span class="song-name">${song.name}</span>
+                    <span class="song-artist">${song.artist}</span>
+                </div>
+                <span class="copy-hint">复制</span>
+            `;
+            // 点击复制
+            div.onclick = () => copyText(`点歌 ${song.name}`);
+            container.appendChild(div);
+        });
+    }
+
+    // --- 通用：复制功能 ---
+    function copyText(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast(`✅ 已复制: ${text}`);
+        }).catch(err => {
+            console.error('复制失败', err);
+            showToast('❌ 复制失败，请手动输入');
+        });
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.innerText = msg;
+        toast.style.display = 'block';
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 2000);
+    }
+</script>
+
+</body>
+</html>
