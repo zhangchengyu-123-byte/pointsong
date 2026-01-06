@@ -342,8 +342,25 @@
         renderSongList(selected, 'song-result-list');
     }
 
-    // --- 逻辑：求签 ---
+// --- 逻辑：求签（带15分钟冷却） ---
     function goToFortune() {
+        // 1. 定义冷却时间 (15分钟 = 15 * 60 * 1000 毫秒)
+        const COOLDOWN = 15 * 60 * 1000;
+        
+        // 2. 检查上次求签时间
+        const lastTime = localStorage.getItem('lastFortuneTime');
+        const now = Date.now();
+
+        if (lastTime && (now - lastTime < COOLDOWN)) {
+            // 如果时间没到，计算还需要几分钟
+            const remainingMinutes = Math.ceil((COOLDOWN - (now - lastTime)) / 60000);
+            
+            // 弹出提示，并阻止后续代码运行
+            showToast(`✋ 施主且慢！心诚则灵，请 ${remainingMinutes} 分钟后再来。`);
+            return; 
+        }
+
+        // 3. 时间到了，允许求签（原有动画逻辑保持不变）
         switchView('view-fortune');
         const content = document.getElementById('fortune-content');
         const loading = document.getElementById('fortune-loading');
@@ -355,7 +372,7 @@
         setTimeout(() => {
             loading.style.display = 'none';
             content.style.display = 'block';
-            runFortuneLogic();
+            runFortuneLogic(); // 运行求签结果逻辑
         }, 1500);
     }
 
@@ -376,6 +393,9 @@
         document.getElementById('fortune-desc').innerText = randomFortune.text;
         
         renderSongList(randomSongs, 'fortune-song-list');
+
+        // =========== 【新增】记录当前时间 ===========
+        localStorage.setItem('lastFortuneTime', Date.now());
     }
 
     // --- 通用：渲染歌单列表 ---
