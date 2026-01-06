@@ -342,25 +342,38 @@
         renderSongList(selected, 'song-result-list');
     }
 
-// --- 逻辑：求签（带15分钟冷却） ---
+// --- 逻辑：求签入口（带回顾功能） ---
     function goToFortune() {
-        // 1. 定义冷却时间 (15分钟 = 15 * 60 * 1000 毫秒)
-        const COOLDOWN = 15 * 60 * 1000;
-        
-        // 2. 检查上次求签时间
-        const lastTime = localStorage.getItem('lastFortuneTime');
+        const COOLDOWN = 15 * 60 * 1000; // 15分钟
         const now = Date.now();
-
-        if (lastTime && (now - lastTime < COOLDOWN)) {
-            // 如果时间没到，计算还需要几分钟
-            const remainingMinutes = Math.ceil((COOLDOWN - (now - lastTime)) / 60000);
-            
-            // 弹出提示，并阻止后续代码运行
-            showToast(`✋ 施主且慢！心诚则灵，请 ${remainingMinutes} 分钟后再来。`);
-            return; 
+        
+        // 1. 读取存档
+        const savedJson = localStorage.getItem('myFortuneRecord');
+        
+        // 2. 检查存档是否存在且有效
+        if (savedJson) {
+            const record = JSON.parse(savedJson);
+            // 如果距离上次抽签还不到 15 分钟
+            if (now - record.time < COOLDOWN) {
+                const leftMins = Math.ceil((COOLDOWN - (now - record.time)) / 60000);
+                
+                // 【核心修改】直接渲染上次的结果，不播放动画
+                document.getElementById('fortune-title').innerText = record.fortune.title || record.fortune.gua;
+                document.getElementById('fortune-desc').innerText = record.fortune.text;
+                renderSongList(record.songs, 'fortune-song-list');
+                
+                // 切换视图显示结果
+                switchView('view-fortune');
+                document.getElementById('fortune-content').style.display = 'block';
+                document.getElementById('fortune-loading').style.display = 'none';
+                
+                // 提示用户
+                showToast(`⏳ 签文有效期还剩 ${leftMins} 分钟`);
+                return; // 结束函数，不再执行下面的新抽签
+            }
         }
 
-        // 3. 时间到了，允许求签（原有动画逻辑保持不变）
+        // 3. 如果没有存档，或者时间已过：执行新抽签流程
         switchView('view-fortune');
         const content = document.getElementById('fortune-content');
         const loading = document.getElementById('fortune-loading');
@@ -368,34 +381,39 @@
         content.style.display = 'none';
         loading.style.display = 'block';
 
-        // 模拟摇签动画 1.5秒
+        // 播放摇签动画 1.5秒后出新结果
         setTimeout(() => {
             loading.style.display = 'none';
             content.style.display = 'block';
-            runFortuneLogic(); // 运行求签结果逻辑
+            runFortuneLogic(); 
         }, 1500);
     }
 
-    function runFortuneLogic() {
-        // 1. 随机签文
+function runFortuneLogic() {
+        // 1. 数据校验
         if (fortuneData.length === 0 || fortuneSongs.length === 0) {
             document.getElementById('fortune-title').innerText = "数据缺失";
             return;
         }
+
+        // 2. 生成新结果
         const randomFortune = fortuneData[Math.floor(Math.random() * fortuneData.length)];
-        
-        // 2. 随机2首歌
         const shuffledSongs = [...fortuneSongs].sort(() => 0.5 - Math.random());
         const randomSongs = shuffledSongs.slice(0, 2);
 
-        // 渲染
+        // 3. 渲染页面
         document.getElementById('fortune-title').innerText = randomFortune.title || randomFortune.gua;
         document.getElementById('fortune-desc').innerText = randomFortune.text;
-        
         renderSongList(randomSongs, 'fortune-song-list');
 
-        // =========== 【新增】记录当前时间 ===========
-        localStorage.setItem('lastFortuneTime', Date.now());
+        // 4. 【核心修改】存档！保存当前时间 + 签文 + 歌曲
+        const record = {
+            time: Date.now(),
+            fortune: randomFortune,
+            songs: randomSongs
+        };
+        // 将对象转为字符串存入 localStorage
+        localStorage.setItem('myFortuneRecord', JSON.stringify(record));
     }
 
     // --- 通用：渲染歌单列表 ---
